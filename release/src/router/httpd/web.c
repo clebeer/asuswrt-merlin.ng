@@ -26762,20 +26762,23 @@ FINISH:
 
 #if defined(RTCONFIG_LIB_CODB) && defined(RTCONFIG_CONNDIAG) && defined(RTCONFIG_DNS_PING)
 static void do_dns_ping(char *url, FILE *stream) {
-	char cmdbuf[1024] = {0};
 	char *dns_ping_list = NULL;
 	struct json_object *json_root = NULL;
 	struct json_object *root = json_object_new_object();
+	pid_t pid;
+	char *argv[] = {"dns_ping", NULL, NULL};
+
 	do_json_decode(root);
 	dns_ping_list = safe_get_cgi_json("dns_ping_list", root);
-	system("killall -9 dns_ping");
+
+	eval("killall", "-9", "dns_ping");
+
 	if(strlen(dns_ping_list) > 0){
-		snprintf(cmdbuf, sizeof(cmdbuf), "dns_ping \"%s\" &", dns_ping_list);
+		argv[1] = dns_ping_list;
 	}
-	else{
-		snprintf(cmdbuf, sizeof(cmdbuf), "dns_ping &");
-	}
-	system(cmdbuf);
+
+	_eval(argv, NULL, 0, &pid);
+
 	if(root)
 		json_object_put(root);
 	if(json_root)
