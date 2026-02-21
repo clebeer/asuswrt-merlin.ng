@@ -179,10 +179,15 @@ lease_file_remove(unsigned short eport, int proto)
 		remove(tmpfilename);
 	}
 #ifdef ASUSWRT
-	char cmd[1024] = {0};
-	snprintf(cmd, sizeof(cmd), "aupnpc-ipc -D -p %s -e %d", proto == IPPROTO_TCP? "TCP": "UDP", eport);
 	syslog(LOG_DEBUG, "send request to aupnpc.");
-	system(cmd);
+	pid_t pid = fork();
+	if (pid == 0) {
+		char port_str[16];
+		snprintf(port_str, sizeof(port_str), "%d", eport);
+		char *argv[] = {"aupnpc-ipc", "-D", "-p", proto == IPPROTO_TCP ? "TCP" : "UDP", "-e", port_str, NULL};
+		execvp(argv[0], argv);
+		_exit(1);
+	}
 #endif
 	return 0;
 
@@ -424,24 +429,40 @@ upnp_redirect(const char * rhost, unsigned short eport,
 #ifdef ASUSWRT
 			if(r == 0)
 			{
-				char cmd[1024] = {0};
-				snprintf(cmd, sizeof(cmd), "aupnpc-ipc -A -p %s -e %d", proto == IPPROTO_TCP? "TCP": "UDP", eport);
-				if(rhost && rhost[0] != '\0')
-					snprintf(cmd + strlen(cmd), sizeof(cmd) - strlen(cmd), " -s %s", rhost);	
-				if(timestamp > 0)
-				{
-					unsigned int lease = timestamp;
-					if (lease != 0)
-					{
-						lease -= upnp_time();
-#ifndef LEASEFILE_USE_REMAINING_TIME
-						lease += time(NULL);
-#endif
-					}
-					snprintf(cmd + strlen(cmd), sizeof(cmd) - strlen(cmd), " -t %u", lease);	
-				}
 				syslog(LOG_DEBUG, "send request to aupnpc.");
-				system(cmd);
+				pid_t pid = fork();
+				if (pid == 0) {
+					char port_str[16];
+					char lease_str[32];
+					snprintf(port_str, sizeof(port_str), "%d", eport);
+					int argi = 0;
+					char *argv[12];
+					argv[argi++] = "aupnpc-ipc";
+					argv[argi++] = "-A";
+					argv[argi++] = "-p";
+					argv[argi++] = proto == IPPROTO_TCP ? "TCP" : "UDP";
+					argv[argi++] = "-e";
+					argv[argi++] = port_str;
+					if(rhost && rhost[0] != '\0') {
+						argv[argi++] = "-s";
+						argv[argi++] = (char *)rhost;
+					}
+					if(timestamp > 0) {
+						unsigned int lease = timestamp;
+						if (lease != 0) {
+							lease -= upnp_time();
+#ifndef LEASEFILE_USE_REMAINING_TIME
+							lease += time(NULL);
+#endif
+						}
+						snprintf(lease_str, sizeof(lease_str), "%u", lease);
+						argv[argi++] = "-t";
+						argv[argi++] = lease_str;
+					}
+					argv[argi] = NULL;
+					execvp(argv[0], argv);
+					_exit(1);
+				}
 			}
 #endif
 			return r;
@@ -484,24 +505,40 @@ upnp_redirect_internal(const char * rhost, unsigned short eport,
 	lease_file_add( eport, iaddr, iport, proto, desc, timestamp);
 #endif
 #ifdef ASUSWRT
-	char cmd[1024] = {0};
-	snprintf(cmd, sizeof(cmd), "aupnpc-ipc -A -p %s -e %d", proto == IPPROTO_TCP? "TCP": "UDP", eport);
-	if(rhost && rhost[0] != '\0')
-		snprintf(cmd + strlen(cmd), sizeof(cmd) - strlen(cmd), " -s %s", rhost);	
-	if(timestamp > 0)
-	{
-		unsigned int lease = timestamp;
-		if (lease != 0)
-		{
-			lease -= upnp_time();
-#ifndef LEASEFILE_USE_REMAINING_TIME
-			lease += time(NULL);
-#endif
-		}
-		snprintf(cmd + strlen(cmd), sizeof(cmd) - strlen(cmd), " -t %u", lease);	
-	}
 	syslog(LOG_DEBUG, "send request to aupnpc.");
-	system(cmd);
+	pid_t pid = fork();
+	if (pid == 0) {
+		char port_str[16];
+		char lease_str[32];
+		snprintf(port_str, sizeof(port_str), "%d", eport);
+		int argi = 0;
+		char *argv[12];
+		argv[argi++] = "aupnpc-ipc";
+		argv[argi++] = "-A";
+		argv[argi++] = "-p";
+		argv[argi++] = proto == IPPROTO_TCP ? "TCP" : "UDP";
+		argv[argi++] = "-e";
+		argv[argi++] = port_str;
+		if(rhost && rhost[0] != '\0') {
+			argv[argi++] = "-s";
+			argv[argi++] = (char *)rhost;
+		}
+		if(timestamp > 0) {
+			unsigned int lease = timestamp;
+			if (lease != 0) {
+				lease -= upnp_time();
+#ifndef LEASEFILE_USE_REMAINING_TIME
+				lease += time(NULL);
+#endif
+			}
+			snprintf(lease_str, sizeof(lease_str), "%u", lease);
+			argv[argi++] = "-t";
+			argv[argi++] = lease_str;
+		}
+		argv[argi] = NULL;
+		execvp(argv[0], argv);
+		_exit(1);
+	}
 #endif
 /*	syslog(LOG_INFO, "creating pass rule to %s:%hu protocol %s for: %s",
 		iaddr, iport, protocol, desc);*/
